@@ -8,15 +8,4 @@ export default defineConfig(({ mode }) => ({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-  test: {
-    globals: true,
-    environment: "jsdom",
-    setupFiles: "./src/setupTests.js",
-    exclude: ["**/e2e/**", "**/*.e2e.spec.js", "**/node_modules/**"],
-    poolOptions: {
-      threads: {
-        singleThread: true,
-      },
-    },
-  },
 }));

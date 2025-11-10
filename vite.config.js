@@ -1,14 +1,11 @@
+import { fileURLToPath, URL } from "url";
 import { defineConfig } from "vitest/config";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-export default defineConfig({
-  base: "/front_7th_chapter2-1/",
+export default defineConfig(({ mode }) => ({
+  base: mode === "production" ? "/front_7th_chapter2-1/" : "/",
   resolve: {
     alias: {
-      "@": resolve(__dirname, "src"),
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   test: {
@@ -22,4 +19,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

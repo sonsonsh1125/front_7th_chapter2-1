@@ -2,6 +2,8 @@ import { HomePage } from "./pages/HomePage.js";
 import { getProducts, getProduct } from "./api/productApi.js";
 import { DetailPage } from "./pages/Detailpage.js";
 
+const basePath = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+
 const enableMocking = () =>
   import("@/mocks/browser.js").then(({ worker }) =>
     worker.start({
@@ -12,28 +14,58 @@ const enableMocking = () =>
     }),
   );
 
+function getNormalizedPathname() {
+  const path = location.pathname;
+
+  if (basePath && path.startsWith(basePath)) {
+    const normalized = path.slice(basePath.length);
+    if (!normalized) {
+      return "/";
+    }
+    return normalized.startsWith("/") ? normalized : `/${normalized}`;
+  }
+
+  return path || "/";
+}
+
 async function render() {
   const $root = document.getElementById("root");
+  const pathname = getNormalizedPathname();
 
-  if (location.pathname === "/") {
+  if (pathname === "/" || pathname === "") {
     $root.innerHTML = HomePage({ loading: true });
     const data = await getProducts();
     $root.innerHTML = HomePage({ ...data, loading: false });
-
-    document.addEventListener("click", (event) => {
-      if (event.target.closest(".product-card")) {
-        const productId = event.target.closest(".product-card").dataset.productId;
-        history.pushState({}, "", `/product/${productId}`);
-        render();
-      }
-    });
-  } else {
+  } else if (pathname.startsWith("/product/")) {
     $root.innerHTML = DetailPage({ loading: true });
-    const productId = location.pathname.split("/").pop();
+    const productId = pathname.split("/").pop();
     const data = await getProduct(productId);
     $root.innerHTML = DetailPage({ product: data, loading: false });
+  } else {
+    // fallback: 홈으로 이동
+    history.replaceState({}, "", `${basePath}/`);
+    render();
+    return;
   }
 }
+
+document.addEventListener("click", (event) => {
+  const productCard = event.target.closest(".product-card");
+
+  if (!productCard) {
+    return;
+  }
+
+  const productId = productCard.dataset.productId;
+
+  if (!productId) {
+    return;
+  }
+
+  const nextUrl = `${basePath}/product/${productId}`;
+  history.pushState({}, "", nextUrl);
+  render();
+});
 
 window.addEventListener("popstate", () => {
   render();

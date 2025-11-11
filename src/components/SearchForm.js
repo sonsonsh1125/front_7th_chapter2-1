@@ -1,4 +1,18 @@
-export const SearchForm = () => {
+const LIMIT_OPTIONS = [10, 20, 50, 100];
+
+const renderLimitOption = (value, current) => {
+  const numericValue = Number(value);
+  const isSelected = Number(current) === numericValue ? "selected" : "";
+
+  return `<option value="${numericValue}" ${isSelected}>${numericValue}개</option>`;
+};
+
+const renderSortOption = (value, label, currentSort) => {
+  const isSelected = value === currentSort ? "selected" : "";
+  return `<option value="${value}" ${isSelected}>${label}</option>`;
+};
+
+export const SearchForm = ({ limit = 20, sort = "price_asc" } = {}) => {
   return /* HTML */ `
     <!-- 검색 및 필터 -->
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
@@ -48,10 +62,7 @@ export const SearchForm = () => {
               id="limit-select"
               class="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="10">10개</option>
-              <option value="20" selected="">20개</option>
-              <option value="50">50개</option>
-              <option value="100">100개</option>
+              ${LIMIT_OPTIONS.map((option) => renderLimitOption(option, limit)).join("")}
             </select>
           </div>
           <!-- 정렬 -->
@@ -62,14 +73,54 @@ export const SearchForm = () => {
               class="text-sm border border-gray-300 rounded px-2 py-1
                              focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             >
-              <option value="price_asc" selected="">가격 낮은순</option>
-              <option value="price_desc">가격 높은순</option>
-              <option value="name_asc">이름순</option>
-              <option value="name_desc">이름 역순</option>
+              ${[
+                { value: "price_asc", label: "가격 낮은순" },
+                { value: "price_desc", label: "가격 높은순" },
+                { value: "name_asc", label: "이름순" },
+                { value: "name_desc", label: "이름 역순" },
+              ]
+                .map(({ value, label }) => renderSortOption(value, label, sort))
+                .join("")}
             </select>
           </div>
         </div>
       </div>
     </div>
   `;
+};
+
+export const bindSearchFormEvents = ({
+  onLimitChange,
+  onSortChange,
+  currentLimit = 20,
+  currentSort = "price_asc",
+} = {}) => {
+  const limitSelect = document.getElementById("limit-select");
+  const sortSelect = document.getElementById("sort-select");
+
+  if (limitSelect) {
+    limitSelect.value = String(currentLimit);
+    limitSelect.onchange = (event) => {
+      const selectedLimit = Number(event.target.value);
+
+      if (Number.isNaN(selectedLimit)) {
+        return;
+      }
+
+      if (typeof onLimitChange === "function") {
+        onLimitChange(selectedLimit);
+      }
+    };
+  }
+
+  if (sortSelect) {
+    sortSelect.value = currentSort;
+    sortSelect.onchange = (event) => {
+      const nextSort = event.target.value;
+
+      if (typeof onSortChange === "function") {
+        onSortChange(nextSort);
+      }
+    };
+  }
 };

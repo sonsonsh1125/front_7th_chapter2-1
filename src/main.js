@@ -247,6 +247,20 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const backToListButton = event.target.closest(".go-to-product-list");
+  if (backToListButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    const targetCategory1 = (backToListButton.dataset.category1 ?? currentProductDetail?.category1 ?? "").trim();
+    const targetCategory2 = (backToListButton.dataset.category2 ?? currentProductDetail?.category2 ?? "").trim();
+    currentCategory1 = targetCategory1;
+    currentCategory2 = targetCategory2;
+    currentSearch = "";
+    history.pushState({}, "", `${basePath}/`);
+    render();
+    return;
+  }
+
   const addToCartButton = event.target.closest(".add-to-cart-btn");
   if (addToCartButton) {
     event.preventDefault();

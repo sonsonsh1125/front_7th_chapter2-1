@@ -2,6 +2,7 @@ const LIMIT_OPTIONS = [10, 20, 50, 100];
 
 const CATEGORY_BUTTON_CLASS =
   "text-left px-3 py-2 text-sm rounded-md border transition-colors bg-white border-gray-300 text-gray-700 hover:bg-gray-50";
+const CATEGORY_BUTTON_ACTIVE_CLASS = "border-blue-500 text-blue-600 bg-blue-50";
 
 const escapeHtml = (value = "") =>
   String(value)
@@ -39,7 +40,8 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
     category1Keys
       .map((category1) => {
         const label = escapeHtml(category1);
-        return `<button type="button" data-category1-btn="${label}" class="category1-filter-btn ${CATEGORY_BUTTON_CLASS}">${label}</button>`;
+        const isActive = selectedCategory1 === category1 ? CATEGORY_BUTTON_ACTIVE_CLASS : "";
+        return `<button type="button" data-category1-btn="${label}" class="category1-filter-btn ${CATEGORY_BUTTON_CLASS} ${isActive}">${label}</button>`;
       })
       .join("") || `<div class="text-sm text-gray-500 italic">카테고리 로딩 중...</div>`;
 
@@ -48,9 +50,10 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
       ? Object.keys(categories[selectedCategory1])
           .map((category2) => {
             const label = escapeHtml(category2);
+            const isActive = selectedCategory2 === category2 ? CATEGORY_BUTTON_ACTIVE_CLASS : "";
             return `<button type="button" data-category2-btn="${label}" data-category1="${escapeHtml(
               selectedCategory1,
-            )}" class="category2-filter-btn ${CATEGORY_BUTTON_CLASS}">${label}</button>`;
+            )}" class="category2-filter-btn ${CATEGORY_BUTTON_CLASS} ${isActive}">${label}</button>`;
           })
           .join("") || `<div class="text-sm text-gray-500 italic">하위 카테고리가 없습니다.</div>`
       : `<div class="text-sm text-gray-500 italic">상위 카테고리를 먼저 선택해주세요.</div>`;
@@ -61,7 +64,7 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
         <label class="text-sm text-gray-600">카테고리:</label>
         <button type="button" data-category-reset class="text-xs hover:text-blue-800 hover:underline">전체</button>
         ${
-          selectedCategory1
+          selectedCategory1 && !selectedCategory2
             ? `<span class="text-xs text-gray-500">&gt;</span>
                <button type="button" data-breadcrumb-category1="${escapeHtml(
                  selectedCategory1,
@@ -79,9 +82,13 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
             : ""
         }
       </div>
-      <div class="flex flex-wrap gap-2">
-        ${category1Buttons}
-      </div>
+      ${
+        selectedCategory1
+          ? ""
+          : `<div class="flex flex-wrap gap-2">
+              ${category1Buttons}
+            </div>`
+      }
       <div class="flex flex-wrap gap-2">
         ${category2Buttons}
       </div>

@@ -223,6 +223,30 @@ async function render() {
 }
 
 document.addEventListener("click", (event) => {
+  const category2Breadcrumb = event.target.closest("[data-breadcrumb-category2]");
+  if (category2Breadcrumb) {
+    event.preventDefault();
+    event.stopPropagation();
+    currentCategory1 = (category2Breadcrumb.dataset.breadcrumbCategory1 ?? "").trim();
+    currentCategory2 = (category2Breadcrumb.dataset.breadcrumbCategory2 ?? "").trim();
+    currentSearch = "";
+    history.pushState({}, "", `${basePath}/`);
+    render();
+    return;
+  }
+
+  const category1Breadcrumb = event.target.closest("[data-breadcrumb-category1]");
+  if (category1Breadcrumb) {
+    event.preventDefault();
+    event.stopPropagation();
+    currentCategory1 = (category1Breadcrumb.dataset.breadcrumbCategory1 ?? "").trim();
+    currentCategory2 = "";
+    currentSearch = "";
+    history.pushState({}, "", `${basePath}/`);
+    render();
+    return;
+  }
+
   const addToCartButton = event.target.closest(".add-to-cart-btn");
   if (addToCartButton) {
     event.preventDefault();

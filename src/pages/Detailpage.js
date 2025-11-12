@@ -18,13 +18,18 @@ export const DetailPage = ({ loading, product, related = [] }) => {
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
             </svg>
-            <button class="breadcrumb-link" data-category1="생활/건강">
+            <button type="button" class="breadcrumb-link" data-breadcrumb-category1="${product.category1}">
               ${product.category1}
             </button>
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
             </svg>
-            <button class="breadcrumb-link" data-category2="생활용품">
+            <button
+              type="button"
+              class="breadcrumb-link"
+              data-breadcrumb-category1="${product.category1}"
+              data-breadcrumb-category2="${product.category2}"
+            >
               ${product.category2}
             </button>
           </div>

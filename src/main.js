@@ -6,6 +6,8 @@ import { openCartModal } from "./app/cart/modal.js";
 import { showToast } from "./app/toast/toast.js";
 
 const basePath = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+const STORAGE_KEY = "spa_cart_items";
+const DEFAULT_PAGINATION = { page: 1, totalPages: 1, hasNext: false, total: 0 };
 
 const enableMocking = () =>
   import("@/mocks/browser.js").then(({ worker }) =>
@@ -39,8 +41,10 @@ let currentCategory2 = "";
 let currentProducts = [];
 let currentProductDetail = null;
 let cartBadgeUnsubscribe = null;
-
-const STORAGE_KEY = "spa_cart_items";
+let currentPagination = { ...DEFAULT_PAGINATION };
+let isFetchingNextPage = false;
+let homeScrollHandler = null;
+let homeScrollBound = false;
 const cartListeners = new Set();
 let cartItems = loadCartFromStorage();
 let categoriesCache = null;
@@ -124,6 +128,9 @@ async function render() {
 
   if (pathname === "/" || pathname === "") {
     currentProductDetail = null;
+    unbindInfiniteScroll();
+    currentPagination = normalizePagination();
+    isFetchingNextPage = false;
     $root.innerHTML = HomePage({
       loading: true,
       filters: {
@@ -149,6 +156,8 @@ async function render() {
         category2: currentCategory2,
       });
       currentProducts = data?.products ?? [];
+      currentPagination = normalizePagination(data?.pagination);
+      isFetchingNextPage = false;
       const categories = await categoriesPromise;
       const filters = {
         ...(data?.filters ?? {}),
@@ -162,9 +171,12 @@ async function render() {
       $root.innerHTML = HomePage({ ...data, filters, categories, loading: false });
       bindFilters();
       bindCartIcon();
+      bindInfiniteScroll();
     } catch (error) {
       console.error("상품 목록 로딩 실패:", error);
       currentProducts = [];
+      currentPagination = normalizePagination();
+      isFetchingNextPage = false;
       const categories = await categoriesPromise;
       $root.innerHTML = HomePage({
         loading: false,
@@ -182,9 +194,13 @@ async function render() {
       });
       bindFilters();
       bindCartIcon();
+      unbindInfiniteScroll();
     }
   } else if (pathname.startsWith("/product/")) {
     currentProducts = [];
+    currentPagination = normalizePagination();
+    isFetchingNextPage = false;
+    unbindInfiniteScroll();
     $root.innerHTML = DetailPage({ loading: true });
     const productId = pathname.split("/").pop();
     const data = await getProduct(productId);
@@ -316,6 +332,147 @@ function updateCartBadge(button, snapshot) {
     button.appendChild(badge);
   }
   badge.textContent = String(count);
+}
+
+function normalizePagination(pagination = DEFAULT_PAGINATION) {
+  const page = Number(pagination.page ?? DEFAULT_PAGINATION.page);
+  const totalPages = Number(pagination.totalPages ?? DEFAULT_PAGINATION.totalPages);
+  const hasNext = typeof pagination.hasNext === "boolean" ? Boolean(pagination.hasNext) : page < totalPages;
+  const total = Number(
+    pagination.total ?? pagination.totalCount ?? DEFAULT_PAGINATION.total ?? currentProducts.length ?? 0,
+  );
+  return { page, totalPages, hasNext, total };
+}
+
+function bindInfiniteScroll() {
+  unbindInfiniteScroll();
+  if (!currentPagination.hasNext) return;
+  const grid = document.getElementById("products-grid");
+  if (!grid) return;
+  homeScrollHandler = () => {
+    if (shouldLoadMore()) {
+      void loadMoreProducts();
+    }
+  };
+  window.addEventListener("scroll", homeScrollHandler, { passive: true });
+  homeScrollBound = true;
+}
+
+function unbindInfiniteScroll() {
+  if (!homeScrollBound || !homeScrollHandler) return;
+  window.removeEventListener("scroll", homeScrollHandler);
+  homeScrollHandler = null;
+  homeScrollBound = false;
+  showLoadIndicator(false);
+  isFetchingNextPage = false;
+}
+
+function shouldLoadMore() {
+  if (isFetchingNextPage) return false;
+  if (!currentPagination.hasNext) return false;
+  const scrollElement = document.documentElement;
+  const scrollPosition = window.innerHeight + window.scrollY;
+  const threshold = Math.max(scrollElement.scrollHeight, document.body.scrollHeight) - 300;
+  return scrollPosition >= threshold;
+}
+
+async function loadMoreProducts() {
+  if (isFetchingNextPage || !currentPagination.hasNext) return;
+  isFetchingNextPage = true;
+  showLoadIndicator(true);
+  const nextPage = (currentPagination.page ?? 1) + 1;
+  try {
+    const data = await getProducts({
+      limit: currentLimit,
+      sort: currentSort,
+      search: currentSearch,
+      category1: currentCategory1,
+      category2: currentCategory2,
+      page: nextPage,
+    });
+    const newProducts = data?.products ?? [];
+    if (newProducts.length > 0) {
+      currentProducts = currentProducts.concat(newProducts);
+      appendProductsToGrid(newProducts);
+      updateProductsCount();
+    }
+    currentPagination = normalizePagination(
+      data?.pagination ?? {
+        page: nextPage,
+        totalPages: currentPagination.totalPages,
+        total: currentPagination.total,
+      },
+    );
+    if (!currentPagination.hasNext) {
+      unbindInfiniteScroll();
+    }
+  } catch (error) {
+    console.error("다음 상품을 불러오지 못했습니다.", error);
+    showToast("다음 상품을 불러오지 못했습니다.", "error");
+  } finally {
+    isFetchingNextPage = false;
+    showLoadIndicator(false);
+  }
+}
+
+function appendProductsToGrid(products) {
+  const grid = document.getElementById("products-grid");
+  if (!grid || !Array.isArray(products) || products.length === 0) return;
+  const fragment = document.createDocumentFragment();
+  products.forEach((product) => {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = createProductCard(product).trim();
+    const element = wrapper.firstElementChild;
+    if (element) {
+      fragment.appendChild(element);
+    }
+  });
+  grid.appendChild(fragment);
+}
+
+function createProductCard(product) {
+  const priceValue = Number(product.lprice ?? product.price ?? 0);
+  const priceLabel = `${priceValue.toLocaleString()}원`;
+  const brand = product.brand ?? "";
+  return `
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden product-card" data-product-id="${product.productId}">
+      <div class="aspect-square bg-gray-100 overflow-hidden cursor-pointer product-image">
+        <img
+          src="${product.image}"
+          alt="${product.title}"
+          class="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+          loading="lazy"
+        />
+      </div>
+      <div class="p-3">
+        <div class="cursor-pointer product-info mb-3">
+          <h3 class="text-sm font-medium text-gray-900 line-clamp-2 mb-1">${product.title}</h3>
+          <p class="text-xs text-gray-500 mb-2">${brand}</p>
+          <p class="text-lg font-bold text-gray-900">${priceLabel}</p>
+        </div>
+        <button
+          class="w-full bg-blue-600 text-white text-sm py-2 px-3 rounded-md hover:bg-blue-700 transition-colors add-to-cart-btn"
+          data-product-id="${product.productId}"
+        >
+          장바구니 담기
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function updateProductsCount() {
+  const countEl = document.getElementById("products-count");
+  if (countEl) {
+    const total = currentPagination.total ?? currentProducts.length ?? 0;
+    countEl.textContent = `${total}개`;
+  }
+}
+
+function showLoadIndicator(visible) {
+  const indicator = document.getElementById("products-load-indicator");
+  if (!indicator) return;
+  indicator.classList.toggle("hidden", !visible);
 }
 
 function getCartSnapshot() {

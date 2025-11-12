@@ -86,7 +86,7 @@ const ErrorState = (message = "잠시 후 다시 시도해주세요.") => /* HTM
   </div>
 `;
 
-export const ProductList = ({ loading = false, products = [], error = null } = {}) => {
+export const ProductList = ({ loading = false, products = [], error = null, total = 0 } = {}) => {
   return /* HTML */ `
     <!-- 상품 목록 -->
     <div class="mb-6">
@@ -100,11 +100,14 @@ export const ProductList = ({ loading = false, products = [], error = null } = {
       ${Skeleton.repeat(4)}
     </div>
     ${Loading}`
-            : `<div class="mb-4 text-sm text-gray-600">
-              총 <span class="font-medium text-gray-900">${products.length}개</span>의 상품
+            : `<div class="mb-4 text-sm text-gray-600" id="products-summary">
+              총 <span class="font-medium text-gray-900" id="products-count">${total}개</span>의 상품
           </div>
           <div class="grid grid-cols-2 gap-4 mb-6" id="products-grid">
               ${products.map(ProductItem).join("")}
+          </div>
+          <div id="products-load-indicator" class="text-center py-4 text-sm text-gray-500 hidden">
+            다음 상품을 불러오는 중...
           </div>
           `}
       </div>

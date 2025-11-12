@@ -197,6 +197,7 @@ async function render() {
       unbindInfiniteScroll();
     }
   } else if (pathname.startsWith("/product/")) {
+    const previousProducts = currentProducts.slice();
     currentProducts = [];
     currentPagination = normalizePagination();
     isFetchingNextPage = false;
@@ -205,7 +206,12 @@ async function render() {
     const productId = pathname.split("/").pop();
     const data = await getProduct(productId);
     currentProductDetail = data;
-    $root.innerHTML = DetailPage({ product: data, loading: false });
+    const relatedProducts = await loadRelatedProducts(data, previousProducts);
+    $root.innerHTML = DetailPage({
+      product: data,
+      loading: false,
+      related: relatedProducts,
+    });
     bindCartIcon();
     bindDetailPageEvents();
   } else {
@@ -234,8 +240,17 @@ document.addEventListener("click", (event) => {
   }
 
   const productCard = event.target.closest(".product-card");
-
   if (!productCard) {
+    const relatedCard = event.target.closest(".related-product-card");
+    if (relatedCard) {
+      const relatedId = relatedCard.dataset.productId;
+      if (!relatedId) {
+        return;
+      }
+      const nextUrl = `${basePath}/product/${relatedId}`;
+      history.pushState({}, "", nextUrl);
+      render();
+    }
     return;
   }
 
@@ -280,6 +295,34 @@ function getCartProduct(productId) {
   }
 
   return null;
+}
+
+async function loadRelatedProducts(product, fallbackProducts = []) {
+  if (!product) return [];
+
+  const fallbackList = (
+    Array.isArray(fallbackProducts) && fallbackProducts.length ? fallbackProducts : currentProducts
+  ).filter((item) => item.productId !== product.productId);
+
+  const params = {
+    page: 1,
+    limit: 6,
+    sort: "price_asc",
+    category1: product.category1 ?? "",
+    category2: product.category2 ?? "",
+  };
+
+  try {
+    const data = await getProducts(params);
+    const products = (data?.products ?? []).filter((item) => item.productId !== product.productId).slice(0, 6);
+    if (products.length > 0) {
+      return products;
+    }
+  } catch (error) {
+    console.error("관련 상품 로딩 실패:", error);
+  }
+
+  return fallbackList.slice(0, 6);
 }
 
 function addProductToCart(productId, quantity = 1) {

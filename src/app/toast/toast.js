@@ -1,4 +1,5 @@
 const containerId = "global-toast-container";
+const AUTO_DISMISS_DELAY = 3000;
 
 export function showToast(message, type = "success") {
   ensureContainer();
@@ -6,11 +7,21 @@ export function showToast(message, type = "success") {
   if (!container) return;
 
   const toast = document.createElement("div");
-  toast.className = getToastClass(type);
+  const { wrapperClass, icon } = getToastConfig(type);
+  toast.className = wrapperClass;
   toast.setAttribute("role", "status");
   toast.innerHTML = `
-    <span>${message}</span>
-    <button type="button" class="ml-3 text-sm underline">닫기</button>
+    <div class="flex-shrink-0">${icon}</div>
+    <p class="flex-1 text-sm font-medium">${escapeHtml(message)}</p>
+    <button
+      type="button"
+      class="flex-shrink-0 ml-3 text-white hover:text-gray-200 transition-colors"
+      aria-label="토스트 닫기"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+      </svg>
+    </button>
   `;
 
   const closeButton = toast.querySelector("button");
@@ -21,14 +32,15 @@ export function showToast(message, type = "success") {
   container.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("opacity-100", "translate-y-0"));
 
-  setTimeout(() => dismissToast(toast), 3000);
+  setTimeout(() => dismissToast(toast), AUTO_DISMISS_DELAY);
 }
 
 function ensureContainer() {
   if (document.getElementById(containerId)) return;
   const container = document.createElement("div");
   container.id = containerId;
-  container.className = "fixed top-4 right-4 flex flex-col gap-2 z-[9999] max-w-sm pointer-events-none";
+  container.className =
+    "fixed top-6 inset-x-0 flex flex-col items-center gap-2 z-[9999] px-4 sm:px-0 pointer-events-none";
   document.body.appendChild(container);
 }
 
@@ -45,15 +57,46 @@ function dismissToast(node) {
   }, 200);
 }
 
-function getToastClass(type) {
-  const base =
-    "pointer-events-auto transition transform translate-y-2 opacity-0 rounded-md shadow-lg px-4 py-3 text-sm flex items-center justify-between";
+function getToastConfig(type) {
+  const baseClass =
+    "pointer-events-auto transition transform translate-y-2 opacity-0 rounded-lg shadow-lg px-4 py-3 text-sm flex items-center space-x-3 max-w-sm w-full sm:w-auto";
+
   switch (type) {
     case "info":
-      return `${base} bg-blue-600 text-white`;
+      return {
+        wrapperClass: `${baseClass} bg-blue-600 text-white`,
+        icon: `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        `,
+      };
     case "error":
-      return `${base} bg-red-600 text-white`;
+      return {
+        wrapperClass: `${baseClass} bg-red-600 text-white`,
+        icon: `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        `,
+      };
     default:
-      return `${base} bg-green-600 text-white`;
+      return {
+        wrapperClass: `${baseClass} bg-green-600 text-white`,
+        icon: `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        `,
+      };
   }
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

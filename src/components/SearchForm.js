@@ -64,7 +64,7 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
         <label class="text-sm text-gray-600">카테고리:</label>
         <button type="button" data-category-reset class="text-xs hover:text-blue-800 hover:underline">전체</button>
         ${
-          selectedCategory1 && !selectedCategory2
+          selectedCategory1
             ? `<span class="text-xs text-gray-500">&gt;</span>
                <button type="button" data-breadcrumb-category1="${escapeHtml(
                  selectedCategory1,

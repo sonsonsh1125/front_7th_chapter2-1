@@ -3,6 +3,7 @@ import { showToast } from "../toast/toast.js";
 
 let overlay = null;
 let unsubscribe = null;
+let keydownHandler = null;
 
 export function openCartModal() {
   const manager = window.cartManager;
@@ -27,6 +28,13 @@ export function openCartModal() {
   updateModalContent(snapshot, manager);
 
   unsubscribe = manager.subscribe((nextSnapshot) => updateModalContent(nextSnapshot, manager));
+  keydownHandler = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeCartModal();
+    }
+  };
+  document.addEventListener("keydown", keydownHandler);
   focusFirstButton();
 }
 
@@ -39,6 +47,10 @@ export function closeCartModal() {
   if (typeof unsubscribe === "function") {
     unsubscribe();
     unsubscribe = null;
+  }
+  if (keydownHandler) {
+    document.removeEventListener("keydown", keydownHandler);
+    keydownHandler = null;
   }
 }
 

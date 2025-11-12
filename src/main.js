@@ -207,6 +207,7 @@ async function render() {
     currentProductDetail = data;
     $root.innerHTML = DetailPage({ product: data, loading: false });
     bindCartIcon();
+    bindDetailPageEvents();
   } else {
     // fallback: 홈으로 이동
     history.replaceState({}, "", `${basePath}/`);
@@ -222,7 +223,12 @@ document.addEventListener("click", (event) => {
     event.stopPropagation();
     const productId = addToCartButton.dataset.productId;
     if (productId) {
-      addProductToCart(productId);
+      const quantityInput = document.getElementById("quantity-input");
+      const quantity = quantityInput ? normalizeDetailQuantity(quantityInput) : 1;
+      addProductToCart(productId, quantity);
+      if (quantityInput) {
+        quantityInput.value = String(quantity);
+      }
     }
     return;
   }
@@ -276,15 +282,16 @@ function getCartProduct(productId) {
   return null;
 }
 
-function addProductToCart(productId) {
+function addProductToCart(productId, quantity = 1) {
   const product = getCartProduct(productId);
   if (!product) {
     console.warn("상품 정보를 찾을 수 없어 장바구니에 담지 못했습니다.", productId);
     return;
   }
+  const amount = Math.max(1, Number(quantity) || 1);
   const existing = cartItems.find((item) => item.productId === productId);
   if (existing) {
-    existing.quantity += 1;
+    existing.quantity += amount;
     existing.selected = true;
   } else {
     cartItems.push({
@@ -294,7 +301,7 @@ function addProductToCart(productId) {
       image: product.image,
       brand: product.brand ?? "",
       selected: true,
-      quantity: 1,
+      quantity: amount,
     });
   }
   persistCart();
@@ -475,6 +482,60 @@ function showLoadIndicator(visible) {
   indicator.classList.toggle("hidden", !visible);
 }
 
+function bindDetailPageEvents() {
+  const quantityInput = document.getElementById("quantity-input");
+  if (!quantityInput) return;
+  const decreaseBtn = document.getElementById("quantity-decrease");
+  const increaseBtn = document.getElementById("quantity-increase");
+
+  if (decreaseBtn) {
+    decreaseBtn.addEventListener("click", () => {
+      adjustDetailQuantity(quantityInput, -1);
+    });
+  }
+
+  if (increaseBtn) {
+    increaseBtn.addEventListener("click", () => {
+      adjustDetailQuantity(quantityInput, 1);
+    });
+  }
+
+  quantityInput.addEventListener("change", () => {
+    normalizeDetailQuantity(quantityInput);
+  });
+}
+
+function normalizeDetailQuantity(input) {
+  const min = getDetailMin(input);
+  const max = getDetailMax(input);
+  let value = Number(input.value);
+  if (!Number.isFinite(value)) value = min;
+  if (value < min) value = min;
+  if (Number.isFinite(max) && value > max) value = max;
+  input.value = String(value);
+  return value;
+}
+
+function adjustDetailQuantity(input, delta) {
+  const min = getDetailMin(input);
+  const max = getDetailMax(input);
+  let value = normalizeDetailQuantity(input) + delta;
+  if (value < min) value = min;
+  if (Number.isFinite(max) && value > max) value = max;
+  input.value = String(value);
+  return value;
+}
+
+function getDetailMin(input) {
+  const raw = Number(input.min);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
+}
+
+function getDetailMax(input) {
+  const raw = Number(input.max);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : Infinity;
+}
+
 function getCartSnapshot() {
   const totalCount = cartItems.length;
   const totalPrice = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -608,7 +669,7 @@ function subscribeCart(listener) {
 window.cartManager = {
   getState: getCartSnapshot,
   subscribe: subscribeCart,
-  addItem: addProductToCart,
+  addItem: (productId, quantity = 1) => addProductToCart(productId, quantity),
   toggleItem: toggleCartItem,
   toggleAll: toggleCartAll,
   updateQuantity: updateCartQuantity,

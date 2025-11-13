@@ -16,12 +16,15 @@ export function openCartModal() {
     return;
   }
 
+  const root = document.getElementById("root") ?? document.body;
+
   overlay = document.createElement("div");
   overlay.id = "cart-modal-overlay";
-  overlay.className = "fixed inset-0 bg-black bg-opacity-40 flex items-end sm:items-center justify-center z-50";
+  overlay.className =
+    "cart-modal-overlay fixed inset-0 bg-black bg-opacity-40 flex items-end sm:items-center justify-center z-50";
   overlay.innerHTML = `<div class="relative w-full sm:w-auto sm:min-w-[360px]"></div>`;
 
-  document.body.appendChild(overlay);
+  root.appendChild(overlay);
   document.body.classList.add("overflow-hidden");
 
   overlay.addEventListener("click", handleOverlayClick);

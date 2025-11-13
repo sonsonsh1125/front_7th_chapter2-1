@@ -31,10 +31,12 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
     return `
       <div class="flex items-center gap-2">
         <label class="text-sm text-gray-600">카테고리:</label>
-        <span class="text-sm text-gray-500 italic">카테고리를 불러오는 중입니다...</span>
+        <span class="text-sm text-gray-500 italic">카테고리 로딩 중...</span>
       </div>
     `;
   }
+
+  const categorySummaryWhenNone = category1Keys.map((category1) => escapeHtml(category1)).join(" ");
 
   const category1Buttons =
     category1Keys
@@ -57,6 +59,10 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
           })
           .join("") || `<div class="text-sm text-gray-500 italic">하위 카테고리가 없습니다.</div>`
       : `<div class="text-sm text-gray-500 italic">상위 카테고리를 먼저 선택해주세요.</div>`;
+
+  const categorySummaryText = !selectedCategory1
+    ? `<div class="text-xs text-gray-600" data-category-summary>카테고리: 전체 ${categorySummaryWhenNone}</div>`
+    : "";
 
   return `
     <div class="space-y-2">
@@ -92,6 +98,7 @@ const renderCategorySection = (categories = {}, selectedCategory1 = "", selected
       <div class="flex flex-wrap gap-2">
         ${category2Buttons}
       </div>
+      ${categorySummaryText}
     </div>
   `;
 };

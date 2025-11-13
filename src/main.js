@@ -4,10 +4,11 @@ import { DetailPage } from "./pages/Detailpage.js";
 import { bindSearchFormEvents } from "./components/SearchForm.js";
 import { openCartModal } from "./app/cart/modal.js";
 import { showToast } from "./app/toast/toast.js";
+import { createAppStore, DEFAULT_PAGINATION, normalizePaginationState } from "./store.js";
 
 const basePath = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
-const STORAGE_KEY = "spa_cart_items";
-const DEFAULT_PAGINATION = { page: 1, totalPages: 1, hasNext: false, total: 0 };
+const STORAGE_KEY = "shopping_cart";
+const LEGACY_STORAGE_KEYS = ["spa_cart_items"];
 
 const enableMocking = () =>
   import("@/mocks/browser.js").then(({ worker }) =>
@@ -33,18 +34,10 @@ function getNormalizedPathname() {
   return path || "/";
 }
 
-let currentLimit = 20;
-let currentSort = "price_asc";
-let currentSearch = "";
-let currentCategory1 = "";
-let currentCategory2 = "";
-let currentProducts = [];
-let currentProductDetail = null;
+const appStore = createAppStore();
+
 let cartBadgeUnsubscribe = null;
-let currentPagination = { ...DEFAULT_PAGINATION };
-let isFetchingNextPage = false;
 let homeScrollHandler = null;
-let homeScrollBound = false;
 const cartListeners = new Set();
 let cartItems = loadCartFromStorage();
 let categoriesCache = null;
@@ -70,53 +63,57 @@ async function loadCategories() {
 }
 
 function bindFilters() {
+  const { filters } = appStore.getState();
   bindSearchFormEvents({
-    currentLimit,
-    currentSort,
-    currentSearch,
+    currentLimit: filters.limit,
+    currentSort: filters.sort,
+    currentSearch: filters.search,
     onLimitChange: (nextLimit) => {
-      if (currentLimit === nextLimit) {
+      const { filters: latest } = appStore.getState();
+      if (latest.limit === nextLimit) {
         return;
       }
-      currentLimit = nextLimit;
+      appStore.updateFilters({ limit: nextLimit });
       render();
     },
     onSortChange: (nextSort) => {
-      if (currentSort === nextSort) {
+      const { filters: latest } = appStore.getState();
+      if (latest.sort === nextSort) {
         return;
       }
-      currentSort = nextSort;
+      appStore.updateFilters({ sort: nextSort });
       render();
     },
     onSearchSubmit: (nextSearch) => {
-      if (currentSearch === nextSearch) {
+      const { filters: latest } = appStore.getState();
+      if (latest.search === nextSearch) {
         return;
       }
-      currentSearch = nextSearch;
+      appStore.updateFilters({ search: nextSearch });
       render();
     },
     onCategoryReset: () => {
-      if (!currentCategory1 && !currentCategory2) {
+      const { filters: latest } = appStore.getState();
+      if (!latest.category1 && !latest.category2) {
         return;
       }
-      currentCategory1 = "";
-      currentCategory2 = "";
+      appStore.updateFilters({ category1: "", category2: "" });
       render();
     },
     onCategory1Change: (nextCategory1) => {
-      if (currentCategory1 === nextCategory1 && !currentCategory2) {
+      const { filters: latest } = appStore.getState();
+      if (latest.category1 === nextCategory1 && !latest.category2) {
         return;
       }
-      currentCategory1 = nextCategory1;
-      currentCategory2 = "";
+      appStore.updateFilters({ category1: nextCategory1, category2: "" });
       render();
     },
     onCategory2Change: (nextCategory1, nextCategory2) => {
-      if (currentCategory1 === nextCategory1 && currentCategory2 === nextCategory2) {
+      const { filters: latest } = appStore.getState();
+      if (latest.category1 === nextCategory1 && latest.category2 === nextCategory2) {
         return;
       }
-      currentCategory1 = nextCategory1;
-      currentCategory2 = nextCategory2;
+      appStore.updateFilters({ category1: nextCategory1, category2: nextCategory2 });
       render();
     },
   });
@@ -127,19 +124,16 @@ async function render() {
   const pathname = getNormalizedPathname();
 
   if (pathname === "/" || pathname === "") {
-    currentProductDetail = null;
+    appStore.setProductDetail(null);
     unbindInfiniteScroll();
-    currentPagination = normalizePagination();
-    isFetchingNextPage = false;
+    appStore.resetPagination();
+    appStore.setFetchingNextPage(false);
+
+    const { filters } = appStore.getState();
+
     $root.innerHTML = HomePage({
       loading: true,
-      filters: {
-        limit: currentLimit,
-        sort: currentSort,
-        search: currentSearch,
-        category1: currentCategory1,
-        category2: currentCategory2,
-      },
+      filters,
     });
 
     const categoriesPromise = loadCategories().catch((error) => {
@@ -148,46 +142,39 @@ async function render() {
     });
 
     try {
-      const data = await getProducts({
-        limit: currentLimit,
-        sort: currentSort,
-        search: currentSearch,
-        category1: currentCategory1,
-        category2: currentCategory2,
-      });
-      currentProducts = data?.products ?? [];
-      currentPagination = normalizePagination(data?.pagination);
-      isFetchingNextPage = false;
+      const params = {
+        limit: filters.limit,
+        sort: filters.sort,
+        search: filters.search,
+        category1: filters.category1,
+        category2: filters.category2,
+      };
+      const data = await getProducts(params);
+      appStore.setProducts(data?.products ?? []);
+      appStore.setPagination(normalizePagination(data?.pagination));
+      appStore.setFetchingNextPage(false);
       const categories = await categoriesPromise;
-      const filters = {
+      const { filters: latestFilters } = appStore.getState();
+      const combinedFilters = {
         ...(data?.filters ?? {}),
-        limit: currentLimit,
-        sort: currentSort,
-        search: currentSearch,
-        category1: currentCategory1,
-        category2: currentCategory2,
+        ...latestFilters,
       };
 
-      $root.innerHTML = HomePage({ ...data, filters, categories, loading: false });
+      $root.innerHTML = HomePage({ ...data, filters: combinedFilters, categories, loading: false });
       bindFilters();
       bindCartIcon();
       bindInfiniteScroll();
     } catch (error) {
       console.error("상품 목록 로딩 실패:", error);
-      currentProducts = [];
-      currentPagination = normalizePagination();
-      isFetchingNextPage = false;
+      appStore.clearProducts();
+      appStore.resetPagination();
+      appStore.setFetchingNextPage(false);
       const categories = await categoriesPromise;
+      const { filters: latestFilters } = appStore.getState();
       $root.innerHTML = HomePage({
         loading: false,
         products: [],
-        filters: {
-          limit: currentLimit,
-          sort: currentSort,
-          search: currentSearch,
-          category1: currentCategory1,
-          category2: currentCategory2,
-        },
+        filters: { ...latestFilters },
         pagination: {},
         error: error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다.",
         categories,
@@ -197,15 +184,15 @@ async function render() {
       unbindInfiniteScroll();
     }
   } else if (pathname.startsWith("/product/")) {
-    const previousProducts = currentProducts.slice();
-    currentProducts = [];
-    currentPagination = normalizePagination();
-    isFetchingNextPage = false;
+    const previousProducts = appStore.getState().products.slice();
+    appStore.clearProducts();
+    appStore.resetPagination();
+    appStore.setFetchingNextPage(false);
     unbindInfiniteScroll();
     $root.innerHTML = DetailPage({ loading: true });
     const productId = pathname.split("/").pop();
     const data = await getProduct(productId);
-    currentProductDetail = data;
+    appStore.setProductDetail(data);
     const relatedProducts = await loadRelatedProducts(data, previousProducts);
     $root.innerHTML = DetailPage({
       product: data,
@@ -227,9 +214,9 @@ document.addEventListener("click", (event) => {
   if (category2Breadcrumb) {
     event.preventDefault();
     event.stopPropagation();
-    currentCategory1 = (category2Breadcrumb.dataset.breadcrumbCategory1 ?? "").trim();
-    currentCategory2 = (category2Breadcrumb.dataset.breadcrumbCategory2 ?? "").trim();
-    currentSearch = "";
+    const nextCategory1 = (category2Breadcrumb.dataset.breadcrumbCategory1 ?? "").trim();
+    const nextCategory2 = (category2Breadcrumb.dataset.breadcrumbCategory2 ?? "").trim();
+    appStore.updateFilters({ category1: nextCategory1, category2: nextCategory2 });
     history.pushState({}, "", `${basePath}/`);
     render();
     return;
@@ -239,11 +226,18 @@ document.addEventListener("click", (event) => {
   if (category1Breadcrumb) {
     event.preventDefault();
     event.stopPropagation();
-    currentCategory1 = (category1Breadcrumb.dataset.breadcrumbCategory1 ?? "").trim();
-    currentCategory2 = "";
-    currentSearch = "";
+    const nextCategory1 = (category1Breadcrumb.dataset.breadcrumbCategory1 ?? "").trim();
+    appStore.updateFilters({ category1: nextCategory1, category2: "" });
     history.pushState({}, "", `${basePath}/`);
     render();
+    return;
+  }
+
+  const detailBackButton = event.target.closest("[data-detail-back]");
+  if (detailBackButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    history.back();
     return;
   }
 
@@ -251,11 +245,10 @@ document.addEventListener("click", (event) => {
   if (backToListButton) {
     event.preventDefault();
     event.stopPropagation();
-    const targetCategory1 = (backToListButton.dataset.category1 ?? currentProductDetail?.category1 ?? "").trim();
-    const targetCategory2 = (backToListButton.dataset.category2 ?? currentProductDetail?.category2 ?? "").trim();
-    currentCategory1 = targetCategory1;
-    currentCategory2 = targetCategory2;
-    currentSearch = "";
+    const detail = appStore.getState().productDetail;
+    const targetCategory1 = (backToListButton.dataset.category1 ?? detail?.category1 ?? "").trim();
+    const targetCategory2 = (backToListButton.dataset.category2 ?? detail?.category2 ?? "").trim();
+    appStore.updateFilters({ category1: targetCategory1, category2: targetCategory2, search: "" });
     history.pushState({}, "", `${basePath}/`);
     render();
     return;
@@ -323,13 +316,14 @@ function getCartProduct(productId) {
     return null;
   }
 
-  const listMatch = currentProducts.find((item) => item.productId === productId);
+  const state = appStore.getState();
+  const listMatch = state.products.find((item) => item.productId === productId);
   if (listMatch) {
     return listMatch;
   }
 
-  if (currentProductDetail?.productId === productId) {
-    return currentProductDetail;
+  if (state.productDetail?.productId === productId) {
+    return state.productDetail;
   }
 
   return null;
@@ -339,7 +333,7 @@ async function loadRelatedProducts(product, fallbackProducts = []) {
   if (!product) return [];
 
   const fallbackList = (
-    Array.isArray(fallbackProducts) && fallbackProducts.length ? fallbackProducts : currentProducts
+    Array.isArray(fallbackProducts) && fallbackProducts.length ? fallbackProducts : appStore.getState().products
   ).filter((item) => item.productId !== product.productId);
 
   const params = {
@@ -381,13 +375,13 @@ function addProductToCart(productId, quantity = 1) {
       price: Number(product.lprice ?? product.price ?? 0),
       image: product.image,
       brand: product.brand ?? "",
-      selected: true,
+      selected: false,
       quantity: amount,
     });
   }
   persistCart();
   notifyCartListeners();
-  showToast("장바구니에 상품이 담겼습니다.");
+  showToast("장바구니에 추가되었습니다");
 }
 
 function bindCartIcon() {
@@ -423,18 +417,14 @@ function updateCartBadge(button, snapshot) {
 }
 
 function normalizePagination(pagination = DEFAULT_PAGINATION) {
-  const page = Number(pagination.page ?? DEFAULT_PAGINATION.page);
-  const totalPages = Number(pagination.totalPages ?? DEFAULT_PAGINATION.totalPages);
-  const hasNext = typeof pagination.hasNext === "boolean" ? Boolean(pagination.hasNext) : page < totalPages;
-  const total = Number(
-    pagination.total ?? pagination.totalCount ?? DEFAULT_PAGINATION.total ?? currentProducts.length ?? 0,
-  );
-  return { page, totalPages, hasNext, total };
+  const state = appStore.getState();
+  return normalizePaginationState(pagination, state.products.length);
 }
 
 function bindInfiniteScroll() {
   unbindInfiniteScroll();
-  if (!currentPagination.hasNext) return;
+  const { pagination } = appStore.getState();
+  if (!pagination.hasNext) return;
   const grid = document.getElementById("products-grid");
   if (!grid) return;
   homeScrollHandler = () => {
@@ -443,21 +433,21 @@ function bindInfiniteScroll() {
     }
   };
   window.addEventListener("scroll", homeScrollHandler, { passive: true });
-  homeScrollBound = true;
 }
 
 function unbindInfiniteScroll() {
-  if (!homeScrollBound || !homeScrollHandler) return;
-  window.removeEventListener("scroll", homeScrollHandler);
-  homeScrollHandler = null;
-  homeScrollBound = false;
+  if (homeScrollHandler) {
+    window.removeEventListener("scroll", homeScrollHandler);
+    homeScrollHandler = null;
+  }
   showLoadIndicator(false);
-  isFetchingNextPage = false;
+  appStore.setFetchingNextPage(false);
 }
 
 function shouldLoadMore() {
+  const { isFetchingNextPage, pagination } = appStore.getState();
   if (isFetchingNextPage) return false;
-  if (!currentPagination.hasNext) return false;
+  if (!pagination.hasNext) return false;
   const scrollElement = document.documentElement;
   const scrollPosition = window.innerHeight + window.scrollY;
   const threshold = Math.max(scrollElement.scrollHeight, document.body.scrollHeight) - 300;
@@ -465,40 +455,41 @@ function shouldLoadMore() {
 }
 
 async function loadMoreProducts() {
-  if (isFetchingNextPage || !currentPagination.hasNext) return;
-  isFetchingNextPage = true;
+  const state = appStore.getState();
+  if (state.isFetchingNextPage || !state.pagination.hasNext) return;
+  appStore.setFetchingNextPage(true);
   showLoadIndicator(true);
-  const nextPage = (currentPagination.page ?? 1) + 1;
+  const nextPage = (state.pagination.page ?? 1) + 1;
   try {
     const data = await getProducts({
-      limit: currentLimit,
-      sort: currentSort,
-      search: currentSearch,
-      category1: currentCategory1,
-      category2: currentCategory2,
+      limit: state.filters.limit,
+      sort: state.filters.sort,
+      search: state.filters.search,
+      category1: state.filters.category1,
+      category2: state.filters.category2,
       page: nextPage,
     });
     const newProducts = data?.products ?? [];
     if (newProducts.length > 0) {
-      currentProducts = currentProducts.concat(newProducts);
+      appStore.appendProducts(newProducts);
       appendProductsToGrid(newProducts);
       updateProductsCount();
     }
-    currentPagination = normalizePagination(
-      data?.pagination ?? {
-        page: nextPage,
-        totalPages: currentPagination.totalPages,
-        total: currentPagination.total,
-      },
-    );
-    if (!currentPagination.hasNext) {
+    const fallbackPagination = {
+      page: nextPage,
+      totalPages: state.pagination.totalPages,
+      total: state.pagination.total,
+    };
+    const normalized = normalizePagination(data?.pagination ?? fallbackPagination);
+    appStore.setPagination(normalized);
+    if (!normalized.hasNext) {
       unbindInfiniteScroll();
     }
   } catch (error) {
     console.error("다음 상품을 불러오지 못했습니다.", error);
     showToast("다음 상품을 불러오지 못했습니다.", "error");
   } finally {
-    isFetchingNextPage = false;
+    appStore.setFetchingNextPage(false);
     showLoadIndicator(false);
   }
 }
@@ -552,7 +543,8 @@ function createProductCard(product) {
 function updateProductsCount() {
   const countEl = document.getElementById("products-count");
   if (countEl) {
-    const total = currentPagination.total ?? currentProducts.length ?? 0;
+    const { pagination, products } = appStore.getState();
+    const total = pagination.total ?? products.length ?? 0;
     countEl.textContent = `${total}개`;
   }
 }
@@ -649,42 +641,62 @@ function notifyCartListeners() {
 }
 
 function loadCartFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) => ({
-      productId: item.productId,
-      title: item.title ?? "",
-      image: item.image ?? "",
-      brand: item.brand ?? "",
-      price: Number(item.price ?? 0),
-      quantity: Math.max(1, Number(item.quantity ?? 1)),
-      selected: item.selected !== false,
-    }));
-  } catch (error) {
-    console.warn("장바구니 데이터를 불러오지 못했습니다.", error);
-    return [];
+  const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        continue;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        continue;
+      }
+      const normalized = parsed.map((item) => ({
+        productId: item.productId,
+        title: item.title ?? "",
+        image: item.image ?? "",
+        brand: item.brand ?? "",
+        price: Number(item.price ?? 0),
+        quantity: Math.max(1, Number(item.quantity ?? 1)),
+        selected: item.selected !== false,
+      }));
+      if (key !== STORAGE_KEY) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+        } catch (error) {
+          console.warn("장바구니 데이터를 최신 형식으로 저장하지 못했습니다.", error);
+        }
+      }
+      return normalized;
+    } catch (error) {
+      console.warn("장바구니 데이터를 불러오지 못했습니다.", error);
+    }
   }
+  return [];
 }
 
 function persistCart() {
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(
-        cartItems.map((item) => ({
-          productId: item.productId,
-          title: item.title,
-          image: item.image,
-          brand: item.brand,
-          price: item.price,
-          quantity: item.quantity,
-          selected: item.selected,
-        })),
-      ),
+    const payload = JSON.stringify(
+      cartItems.map((item) => ({
+        productId: item.productId,
+        title: item.title,
+        image: item.image,
+        brand: item.brand,
+        price: item.price,
+        quantity: item.quantity,
+        selected: item.selected,
+      })),
     );
+    localStorage.setItem(STORAGE_KEY, payload);
+    LEGACY_STORAGE_KEYS.forEach((key) => {
+      try {
+        localStorage.setItem(key, payload);
+      } catch (error) {
+        console.warn(`장바구니 데이터를 레거시 키 ${key}에 저장하지 못했습니다.`, error);
+      }
+    });
   } catch (error) {
     console.warn("장바구니 데이터를 저장하지 못했습니다.", error);
   }

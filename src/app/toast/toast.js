@@ -15,6 +15,7 @@ export function showToast(message, type = "success") {
     <p class="flex-1 text-sm font-medium">${escapeHtml(message)}</p>
     <button
       type="button"
+      id="toast-close-btn"
       class="flex-shrink-0 ml-3 text-white hover:text-gray-200 transition-colors"
       aria-label="토스트 닫기"
     >
